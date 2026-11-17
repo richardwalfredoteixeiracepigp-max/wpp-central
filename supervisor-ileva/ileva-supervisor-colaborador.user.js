@@ -406,6 +406,7 @@
     return null;
   }
   async function openChat(name) {
+    pipFocusWa();
     if (currentChatName() === name) return true;
     const r = await findRow(name);
     if (!r) return false;
@@ -1681,7 +1682,10 @@
   @keyframes mPop{0%{transform:scale(.6);opacity:0}100%{transform:scale(1);opacity:1}}
   :host(.pip) .fab{right:12px !important;bottom:12px !important}
   :host(.pip) .meetbar{left:8px !important;top:8px !important;transform:none !important;width:calc(100vw - 16px) !important}
-  :host(.pip) .panel{display:none !important}
+  :host(.pip:not(.pipopen)) .panel{display:none !important}
+  :host(.pip.pipopen) .panel{width:100vw !important;border-left:0 !important}
+  :host(.pip.pipopen) .fab,:host(.pip.pipopen) .pq{display:none !important}
+  :host(.pip.pnf) .pq,:host(.pip.pnr) .meetbar,:host(.pip.pnt) .ttoast,:host(.pip.pnl) .lbtoast{display:none !important}
   :host(.pip) .mt{padding:8px 10px;gap:6px 10px}
   :host(.pip) .mt:not(.mini){flex-wrap:wrap}
   :host(.pip) .mt:not(.mini) .mi{flex:1 1 60%}
@@ -2230,7 +2234,7 @@
     try {
       if (!EQUIPE || !BLOCK_HOSTS.test(location.hostname)) return;
       // nas abas do YouTube/Spotify consulta a planilha a cada minuto (não depende do WhatsApp aberto)
-      if (SHARED_URL && Date.now() - blkLastFetch > 60000) { blkLastFetch = Date.now(); gmGet({ action: 'cfg' }).then(j => { if (j.cfg && j.cfg.acesso && HAS_GM) gmSetJ(ACESSO_KEY, j.cfg.acesso); const b = (j.cfg && j.cfg.block) || { on: false }; lsSet(BLOCK_KEY, { on: !!b.on, by: b.by || '', at: b.at || 0 }); blockTick(); }).catch(() => { }); }
+      if (SHARED_URL && Date.now() - blkLastFetch > 60000) { blkLastFetch = Date.now(); gmGet({ action: 'cfg' }).then(j => { if (j.cfg && j.cfg.acesso && HAS_GM) gmSetJ(ACESSO_KEY, j.cfg.acesso); if (j.cfg && HAS_GM) gmSetJ('ilevaSup.pipRegra.v1', j.cfg.pipRegra || {}); const b = (j.cfg && j.cfg.block) || { on: false }; lsSet(BLOCK_KEY, { on: !!b.on, by: b.by || '', at: b.at || 0 }); blockTick(); }).catch(() => { }); }
       const b = blockState();
       if (!b.on) { if (blkHost) { blkHost.remove(); blkHost = null; } return; }
       document.querySelectorAll('video,audio').forEach(m => { try { if (!m.paused) m.pause(); m.muted = true; } catch (e) { } });
@@ -2412,6 +2416,7 @@
       const fabVis = fab.style.display !== 'none' && fab.offsetWidth;
       const list = (st && st.open || []).slice().sort((a, b) => (b.level === 'red') - (a.level === 'red') || (b.wait || 0) - (a.wait || 0));
       if (!isCorp() || ui.open || ui.mini || !fabVis || !list.length || lunchOn()) { pqHide(); return; }
+      if (pipWin && pipPref().modo === 'aviso' && !list.some(g => g.level === 'red')) { pqHide(); return; }
       if (!pqEl || !shadow.contains(pqEl)) { pqEl = h('div', { class: 'pq' }); pqEl.addEventListener('wheel', e => wheelOp(e, 'pqOp', pqEl), { passive: false }); shadow.append(pqEl); pqSig = ''; applyOp(); }
       const reds = list.filter(g => g.level === 'red').length, nome = (userNome() || '').split(' ')[0];
       const tm = g => (g.approx ? '+' : '') + fmtDur(g.wait || 0);
@@ -2522,7 +2527,7 @@
     let styled = false;
     try { const sheet = new CSSStyleSheet(); sheet.replaceSync(CSS); shadow.adoptedStyleSheets = [sheet]; styled = true; } catch (e) { }
     if (!styled) { const s = document.createElement('style'); s.textContent = CSS; shadow.append(s); }
-    fab = h('button', { class: 'fab', title: 'Abrir o Supervisor de Atendimento (arraste para mudar de lugar)', onclick: () => { if (fabDragged) { fabDragged = false; return; } if (ui.mini) { setMini(false); return; } if (!IS_WA) { satHint(fab); return; } if (pipWin) { try { window.focus(); } catch (e) { } satHint(fab, 'Para abrir o painel, feche esta janela flutuante'); return; } setOpen(true); } });
+    fab = h('button', { class: 'fab', title: 'Abrir o Supervisor de Atendimento (arraste para mudar de lugar)', onclick: () => { if (fabDragged) { fabDragged = false; return; } if (ui.mini) { setMini(false); return; } if (!IS_WA) { satHint(fab); return; } if (pipWin) { setOpen(!ui.open); return; } setOpen(true); } });
     fab.addEventListener('pointerdown', fabDown);
     placeFab();
     statusEl = h('small', {});
@@ -2543,6 +2548,8 @@
               h('div', { class: 'hmenu' },
             h('button', { class: 'mi', 'data-i': 'transp', title: 'Transparência do botão do Supervisor e do alerta de reunião', onclick: () => { opEl.style.display = opEl.style.display === 'none' ? 'block' : 'none'; hmClose(); } }, 'Transparência e exibição'),
             h('button', { class: 'mi', 'data-i': 'sol', title: 'Mostrar a tela de bom dia', onclick: () => { hmClose(); setOpen(false); showWelcome(); } }, 'Ver tela de bom dia'),
+            h('button', { class: 'mi', 'data-i': 'transp', title: 'Abre a barra, a fila e os avisos numa janela que fica por cima de qualquer programa, mesmo com o navegador minimizado', onclick: () => { hmClose(); togglePip(); } }, 'Janela flutuante (por cima de tudo)'),
+            h('button', { class: 'mi', 'data-i': 'transp', title: 'Esconde o Supervisor em todas as abas e na janela flutuante, para tirar print ou gravar a tela. Atalho: Ctrl+Shift+9 (de novo para mostrar)', onclick: () => { hmClose(); esconderPor(5); } }, 'Esconder por 5 minutos (Ctrl+Shift+9)'),
             h('button', { class: 'mi', 'data-i': 'largura', title: 'Largura do painel', onclick: () => { const i = WIDTHS.indexOf(ui.width); ui.width = WIDTHS[(i + 1) % WIDTHS.length]; saveUi(); render(true); } }, 'Largura do painel'),
             IS_EXT ? h('button', { class: 'mi', 'data-i': 'config', title: 'Abrir a página de Configurações da extensão', onclick: () => { hmClose(); try { chrome.runtime.sendMessage({ t: 'ilv-open-options' }); } catch (e) { } } }, 'Página de Configurações') : null,
               )),
@@ -2645,7 +2652,7 @@
     addEventListener('pointermove', mv); addEventListener('pointerup', up);
   }
   addEventListener('resize', () => placeFab());
-  function setOpen(v) { if (v && 'Notification' in window && Notification.permission === 'default') { try { Notification.requestPermission(); } catch (e) { } } ui.open = !!v; saveUi(); render(true); }
+  function setOpen(v) { if (v && 'Notification' in window && Notification.permission === 'default') { try { Notification.requestPermission(); } catch (e) { } } ui.open = !!v; pipOpenSync(); saveUi(); render(true); }
   function setTab(t, filter) { t = ['reun', 'rx', 'lemb', 'tar', 'chat'].includes(t) ? t : 'atend'; ui.tab = t; ui.filter = filter || null; view = 'main'; saveUi(); render(true); if (bodyEl) bodyEl.scrollTop = 0; }
 
   // Encolhe o WhatsApp para o painel ficar AO LADO da conversa, sem cobrir nada
@@ -2772,6 +2779,7 @@
       if (Array.isArray(j.fins)) mergeFins(j.fins);
       if (j.cfg && typeof j.cfg === 'object' && MINI_OPTS.includes(Number(j.cfg.miniMin)) && Number(ui.miniMin) !== Number(j.cfg.miniMin) && !(ui.miniMinAt && ui.miniMinAt > (j.cfg.miniMinAt || 0))) { ui.miniMin = Number(j.cfg.miniMin); ui.miniMinAt = j.cfg.miniMinAt || 0; saveUi(); syncMini(); }
       if (j.cfg && typeof j.cfg === 'object' && j.cfg.acesso && HAS_GM) gmSetJ(ACESSO_KEY, j.cfg.acesso);
+      if (j.cfg && typeof j.cfg === 'object' && HAS_GM) gmSetJ('ilevaSup.pipRegra.v1', j.cfg.pipRegra || {});
       if (j.cfg && typeof j.cfg === 'object') { const b = j.cfg.block || { on: false }; const cur = lsGet(BLOCK_KEY, {}) || {}; if (cur.on !== !!b.on || cur.at !== b.at) { lsSet(BLOCK_KEY, { on: !!b.on, by: b.by || '', at: b.at || 0 }); blockLabelRefresh(); } }
       // tarefas compartilhadas
       if (Array.isArray(j.tars)) {
@@ -2823,7 +2831,7 @@
     try {
       if (!host) return;
       const pipOn = !IS_WA && Date.now() - (gmGetJ('ilevaSup.pipAt', 0) || 0) < 15000;
-      const hide = pipOn || isPresenting();
+      const hide = pipOn || escondido() || (isPresenting() && pipPref().apresentando !== false);
       if ((host.style.display === 'none') !== hide) host.style.display = hide ? 'none' : '';
     } catch (e) { }
   }
@@ -3100,6 +3108,50 @@
   const souDono = (...nomes) => { const me = deacc(userNome()); return !me || nomes.some(n => n && deacc(String(n)).includes(me)); };
   const podeFinalizar = m => souDono(m.resp) || pode('finalizar_reuniao_de_outros');
   const TAB_PERM = { tom: 'revisao_tom', base: 'revisao_tom', resumo: 'ver_relatorios', manha: 'ronda', chat: 'chat_equipe' };
+  // ===== Janela flutuante: preferências pessoais (Configurações > Telas e monitores) + regra do gestor =====
+  const PIP_DEF = { usar: true, modo: 'sempre', fila: true, reun: true, tar: true, lemb: true, lembrar: true, apresentando: true };
+  function pipPref() {
+    const pr = Object.assign({}, PIP_DEF, ((HAS_GM ? gmGetJ('ilevaExt.prefs', {}) : {}) || {}).pip || {});
+    const rg = (HAS_GM ? gmGetJ('ilevaSup.pipRegra.v1', {}) : {}) || {};
+    pr.obrigatoria = !!rg.obrigatoria; if (pr.obrigatoria) { pr.usar = true; pr.lembrar = true; }
+    return pr;
+  }
+  // esconder o Supervisor por alguns minutos (para print ou gravação de tela): menu ou Ctrl+Shift+9 em qualquer programa
+  const HIDE_KEY = 'ilevaExt.hideUntil';
+  const escondido = () => (HAS_GM ? Number(gmGetJ(HIDE_KEY, 0)) || 0 : 0) > Date.now();
+  function esconderPor(min) { if (HAS_GM) gmSetJ(HIDE_KEY, min ? Date.now() + min * MIN : 0); presApply(); }
+  let pipAskEl = null, pipAskOff = false;
+  // painel completo dentro da janela flutuante: a janela cresce ao abrir e volta ao tamanho da barra ao minimizar
+  function pipOpenSync() {
+    try {
+      if (!host) return;
+      host.classList.toggle('pipopen', !!(pipWin && ui.open));
+      if (!pipWin) return;
+      if (ui.open) pipWin.resizeTo(Math.max(480, (Number(ui.width) || 400) + 40), Math.min((screen.availHeight || 900) - 40, 900));
+      else pipWin.resizeTo(460, 620);
+    } catch (e) { }
+  }
+  // abrir uma conversa a partir da janela flutuante: traz a janela do WhatsApp para a frente
+  function pipFocusWa() { if (!pipWin) return; try { if (IS_EXT) chrome.runtime.sendMessage({ t: 'ilv-focus' }); else window.focus(); } catch (e) { } }
+  function pipTick() {
+    try {
+      if (!host || !shadow) return;
+      const pr = pipPref();
+      host.classList.toggle('pnf', !pr.fila); host.classList.toggle('pnr', !pr.reun); host.classList.toggle('pnt', !pr.tar); host.classList.toggle('pnl', !pr.lemb);
+      if (pipWin && escondido()) { try { pipWin.close(); } catch (e) { } }
+      if (!pipWin && host.classList.contains('pipopen')) host.classList.remove('pipopen');
+      const want = IS_WA && !pipWin && pr.usar && pr.lembrar && !pipAskOff && !escondido() && !lunchOn() && 'documentPictureInPicture' in window && document.visibilityState === 'visible';
+      if (!want) { if (pipAskEl) pipAskEl.style.display = 'none'; return; }
+      if (!pipAskEl || !shadow.contains(pipAskEl)) {
+        pipAskEl = h('div', { style: 'position:fixed;right:16px;bottom:74px;z-index:2147483645;display:flex;align-items:center;gap:8px;background:#111722;border:1px solid #273042;border-radius:10px;padding:8px 10px 8px 12px;color:#e7e9ee;font:13px Segoe UI,Helvetica,Arial,sans-serif;box-shadow:0 10px 28px rgba(0,0,0,.45)' });
+        shadow.append(pipAskEl);
+      }
+      pipAskEl.replaceChildren(
+        h('button', { style: 'background:#6d28d9;border:0;color:#fff;border-radius:7px;padding:6px 10px;font:600 12.5px Segoe UI,sans-serif;cursor:pointer', title: 'A barra, a fila e os avisos ficam por cima de qualquer programa, mesmo com o navegador minimizado', onclick: () => togglePip() }, '⧉ Abrir janela flutuante'),
+        pr.obrigatoria ? h('span', { style: 'color:#8a93a3;font-size:11.5px' }, 'definido pelo gestor') : h('button', { style: 'background:none;border:0;color:#8a93a3;cursor:pointer;font-size:14px', title: 'Agora não', onclick: () => { pipAskOff = true; pipTick(); } }, '✕'));
+      pipAskEl.style.display = 'flex';
+    } catch (e) { }
+  }
   // ===== Modo econômico: sem animações decorativas (definido em Configurações > Alertas e notificações) =====
   function ecoTick() {
     try {
@@ -5316,10 +5368,11 @@
   // ------------------------------------------------------------------ JANELA FLUTUANTE (fica por cima de qualquer programa)
   function togglePip() {
     if (pipWin) { try { pipWin.close(); } catch (e) { } return; }
+    if (!pipPref().usar) { lastAction = { kind: 'info', key: '', label: 'A janela flutuante está desligada em Configurações > Telas e monitores.', at: Date.now() }; try { render(true); } catch (e) { } return; }
     if (!('documentPictureInPicture' in window)) {
       lastAction = { kind: 'info', key: '', label: 'Este navegador não tem janela flutuante. Use o Google Chrome ou o Microsoft Edge atualizado.', at: Date.now() }; render(true); return;
     }
-    documentPictureInPicture.requestWindow({ width: 420, height: 360 }).then(pw => {
+    documentPictureInPicture.requestWindow({ width: 460, height: 620 }).then(pw => {
       pipWin = pw;
       try {
         const bs = pw.document.createElement('style');
@@ -5513,6 +5566,7 @@
     ['focus', 'visibilitychange', 'pointermove'].forEach(ev => addEventListener(ev, () => { try { if (lunchEl || lunchOn()) lunchTick(); } catch (e) { } }, { passive: true }));
     setInterval(saverTick, 5000);
     setInterval(ecoTick, 3000); setTimeout(ecoTick, 1500);
+    setInterval(pipTick, 2000); setTimeout(pipTick, 4000);
     setInterval(lembTick, 15000); setTimeout(lembTick, 6000); setInterval(tarTick, 15000); setTimeout(tarTick, 9000); setInterval(eodTick, 30000);
     setTimeout(() => { try { lunchApply(); } catch (e) { } }, 1500);
     if (HAS_GM && typeof GM_addValueChangeListener === 'function') GM_addValueChangeListener(LUNCH_KEY, () => { lunchNotified = 0; try { lunchApply(); } catch (e) { } });

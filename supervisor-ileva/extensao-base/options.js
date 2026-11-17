@@ -181,7 +181,26 @@ function pgTelas() {
     h('b', {}, `Monitor ${i + 1}`), h('small', {}, (id === aqui ? 'Onde esta página está · ' : '') + (on ? 'Proteção ligada' : 'Sem proteção'))); };
   const op = (k, t) => { const v = Math.round((Number(u[k]) >= 0.15 && Number(u[k]) <= 1 ? Number(u[k]) : 1) * 100); const out = h('span', {}, v + '%');
     return linha(t, null, h('div', { class: 'range' }, h('input', { type: 'range', min: 15, max: 100, step: 5, value: v, oninput: e => { out.textContent = e.target.value + '%'; }, onchange: e => updUi({ [k]: Number(e.target.value) / 100 }) }), out)); };
-  return [cabecalho('Telas e monitores', 'Onde e como o Supervisor aparece na sua tela.'),
+  const regra = (st.remote && st.remote.pipRegra) || getJ('ilevaSup.pipRegra.v1', {}) || {};
+  const pp = Object.assign({ usar: true, modo: 'sempre', fila: true, reun: true, tar: true, lemb: true, lembrar: true, apresentando: true }, prefs().pip || {});
+  const setPip = patch => updPrefs({ pip: Object.assign({}, pp, patch) }).then(render);
+  const obrig = !!regra.obrigatoria;
+  const modo = h('select', { onchange: e => setPip({ modo: e.target.value }) }, [['sempre', 'Sempre visível'], ['aviso', 'Só quando houver aviso']].map(([v, l]) => h('option', { value: v, selected: pp.modo === v ? true : null }, l)));
+  const pip = bloco('Janela flutuante', 'Barra, fila e avisos numa janela por cima de qualquer programa, mesmo com o navegador minimizado. Abre pelo menu ⋯ do painel no WhatsApp.',
+    linha('Usar janela flutuante', obrig ? travado('Obrigatória para a equipe (definido pelo gestor)') : 'Mostra o botão e o lembrete para abrir a janela', sw(obrig || pp.usar, v => setPip({ usar: v }), obrig)),
+    linha('Modo de exibição', 'Só quando houver aviso: a fila aparece apenas com atendimento urgente; reuniões, tarefas e lembretes aparecem sempre', modo),
+    linha('Fila de atendimentos', null, sw(pp.fila, v => setPip({ fila: v }))),
+    linha('Alertas de reunião', null, sw(pp.reun, v => setPip({ reun: v }))),
+    linha('Avisos de tarefas', null, sw(pp.tar, v => setPip({ tar: v }))),
+    linha('Lembretes de cobrança', null, sw(pp.lemb, v => setPip({ lemb: v }))),
+    linha('Lembrar de abrir', obrig ? travado('Definido pelo gestor') : 'Ao abrir o WhatsApp, mostra o botão "Abrir janela flutuante". O Chrome exige um clique para abrir.', sw(obrig || pp.lembrar, v => setPip({ lembrar: v }), obrig)));
+  const hideAt = Number(getJ('ilevaExt.hideUntil', 0)) || 0, oculto = hideAt > Date.now();
+  const priv = bloco('Privacidade na tela', 'Para tirar print, gravar a tela ou apresentar sem mostrar o Supervisor.',
+    linha('Esconder ao apresentar no Google Meet', 'Esconde barra, fila e avisos enquanto você compartilha a tela', sw(pp.apresentando !== false, v => setPip({ apresentando: v }))),
+    linha('Esconder agora por 5 minutos', oculto ? `Escondido até ${new Date(hideAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}` : 'Também pelo atalho Ctrl+Shift+9, em qualquer programa (de novo para mostrar)',
+      h('button', { class: 'btn', onclick: () => setJ('ilevaExt.hideUntil', oculto ? 0 : Date.now() + 5 * 60e3).then(() => { toast(oculto ? 'Supervisor visível de novo.' : 'Supervisor escondido por 5 minutos.'); render(); }) }, oculto ? 'Mostrar agora' : 'Esconder')),
+    linha('Trocar o atalho', 'Se Ctrl+Shift+9 já for usado por outro programa', h('button', { class: 'btn', onclick: () => chrome.tabs.create({ url: 'chrome://extensions/shortcuts' }) }, 'Abrir atalhos')));
+  return [cabecalho('Telas e monitores', 'Onde e como o Supervisor aparece na sua tela.'), pip, priv,
     bloco('Proteção de tela', 'Mostra a tela de bom dia após 5 minutos sem atividade. Desmarque o monitor onde roda vídeo.', h('div', { class: 'mons' }, lista.map(card)),
       h('div', { class: 'lbl', style: 'padding:0 0 14px' }, 'Um monitor aparece aqui depois que o Supervisor é aberto nele pelo menos uma vez.')),
     bloco('Transparência', 'Quanto menor, mais discreto. Também dá para ajustar com a roda do mouse sobre cada elemento.', op('fabOp', 'Barra de atendimentos'), op('meetOp', 'Alerta de reunião'), op('pqOp', 'Fila de prioridade'))];
@@ -303,6 +322,8 @@ function pgRegras() {
     MINI_OPTS.map(v => h('option', { value: v, selected: v === mini ? true : null }, `${v} minutos`)));
   return [cabecalho('Regras da equipe', 'Valem para todos os computadores em até 1 minuto.'),
     bloco('Alertas', 'Quanto tempo o alerta pode ficar minimizado antes de voltar sozinho à tela.', linha('Tempo máximo do alerta minimizado', 'Igual para toda a equipe', sel)),
+    bloco('Janela flutuante', 'Torna a janela flutuante obrigatória: o colaborador não consegue desligar e o lembrete para abrir não pode ser dispensado.',
+      linha('Janela flutuante obrigatória para a equipe', (r.pipRegra && r.pipRegra.at) ? `Alterado por ${r.pipRegra.by || '—'} em ${fmtDH(r.pipRegra.at)}` : 'Cada pessoa escolhe', sw(!!(r.pipRegra && r.pipRegra.obrigatoria), async v => { try { await salvaRemoto({ pipRegra: { obrigatoria: v, by: meuNome(), at: Date.now() } }); await setJ('ilevaSup.pipRegra.v1', { obrigatoria: v }); await auditar(`${v ? 'Tornou obrigatória' : 'Deixou opcional'} a janela flutuante`); toast('Regra salva para a equipe.'); } catch (x) { toast('Não foi possível salvar: ' + x.message, true); } render(); }))),
     bloco('Bloqueio de sites', 'Bloqueia YouTube e Spotify nos computadores da equipe durante o expediente. O gestor não é bloqueado.',
       linha('Bloquear YouTube e Spotify', blk.on ? `Ligado por ${blk.by || '—'} em ${fmtDH(blk.at)}` : 'Desligado', sw(!!blk.on, async v => { try { await salvaRemoto({ block: { on: v, by: meuNome(), at: Date.now() } }); await auditar(`${v ? 'Ligou' : 'Desligou'} o bloqueio de YouTube e Spotify`); toast(v ? 'Bloqueio ligado para a equipe.' : 'Bloqueio desligado.'); } catch (x) { toast('Não foi possível salvar: ' + x.message, true); } render(); })))];
 }

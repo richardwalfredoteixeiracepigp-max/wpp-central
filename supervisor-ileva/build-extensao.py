@@ -44,6 +44,7 @@ def build(variant, script, name, desc):
         'action': {'default_title': name, 'default_icon': {'16': 'icons/16.png', '32': 'icons/32.png'}},
         'background': {'service_worker': 'background.js'},
         'options_page': 'options.html',
+        'commands': {'esconder': {'suggested_key': {'default': 'Ctrl+Shift+9'}, 'description': 'Esconder ou mostrar o Supervisor por 5 minutos (print ou gravação de tela)', 'global': True}},
         'permissions': ['storage', 'unlimitedStorage', 'alarms'],
         'host_permissions': ['https://script.google.com/*', 'https://script.googleusercontent.com/*'],
         'content_scripts': [
